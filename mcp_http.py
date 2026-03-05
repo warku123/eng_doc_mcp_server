@@ -27,7 +27,7 @@ TOOLS_DEFINITION = [
 ]
 
 INDEX_PATH = "./site/search/search_index.json"
-BASE_URL = "https://abn2357.github.io/documentation-en/"
+BASE_URL = "https://tronprotocol.github.io/documentation-en/"
 
 @app.get("/mcp")
 async def get_mcp_config():
