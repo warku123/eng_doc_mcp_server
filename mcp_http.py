@@ -93,17 +93,27 @@ async def handle_mcp_request(request: Request):
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 def perform_search(query: str):
-    """搜索本地索引逻辑"""
     if not os.path.exists(INDEX_PATH):
         return "Error: Index not found. Run 'mkdocs build'."
     with open(INDEX_PATH, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    query_lower = query.lower()
+
+    # 按空格分词，每个词都要在 title 或 text 里出现（放宽匹配）
+    query_words = [w.strip() for w in query.lower().split() if len(w.strip()) > 1]
+    if not query_words:
+        query_words = [query.lower()]
+
     hits = []
     for doc in data['docs']:
-        if query_lower in doc['title'].lower() or query_lower in doc['text'].lower():
-            hits.append(f"### {doc['title']}\nURL: {BASE_URL}{doc['location']}\nExcerpt: {doc['text'][:200]}...")
-            if len(hits) >= 5: break
+        title_lower = doc['title'].lower()
+        text_lower = doc.get('text', '').lower()
+        # 所有词都在该 doc 中出现即算命中
+        if all(word in title_lower or word in text_lower for word in query_words):
+            excerpt = (doc.get('text') or '')[:200]
+            hits.append(f"### {doc['title']}\nURL: {BASE_URL}{doc['location']}\nExcerpt: {excerpt}...")
+            if len(hits) >= 5:
+                break
+
     return "\n\n".join(hits) if hits else "No relevant documentation found."
 
 if __name__ == "__main__":
