@@ -59,7 +59,7 @@ async def handle_mcp_request(request: Request):
                 }
             }
 
-        # 阶段 2: 告诉 Cursor 有哪些工具可用 (解决你看到的 No tools 报错)
+        # 阶段 2: 告诉 Cursor 有哪些工具可用
         if method == "tools/list":
             return {
                 "jsonrpc": "2.0",
