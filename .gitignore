@@ -1,1 +1,5 @@
 site/
+*.pyc
+
+# vscode
+settings.json
