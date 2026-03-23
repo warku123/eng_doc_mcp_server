@@ -3,6 +3,8 @@ from fastapi.responses import JSONResponse
 import json
 import os
 import httpx
+import asyncio
+from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -104,6 +106,18 @@ TOOLS_DEFINITION = [
             "type": "object",
             "properties": {}
         }
+    },
+    {
+        "name": "SearchTronDeveloperDocs",
+        "description": "Search TRON developer documentation at developers.tron.network. Covers DApp development, smart contracts, wallets, tools (TronBox, TronWeb, TronLink), testnets, and integration guides.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query for TRON documentation"},
+                "limit": {"type": "integer", "description": "Number of results to return (1-10)", "default": 5}
+            },
+            "required": ["query"]
+        }
     }
 ]
 
@@ -177,6 +191,11 @@ async def handle_mcp_request(request: Request):
                 result_text = await get_account_resource(arguments.get("address"))
             elif tool_name == "GetNowBlock":
                 result_text = await get_now_block()
+            elif tool_name == "SearchTronDeveloperDocs":
+                result_text = await search_tron_developer_docs(
+                    arguments.get("query", ""),
+                    arguments.get("limit", 5)
+                )
             else:
                 result_text = f"Unknown tool: {tool_name}"
             
@@ -196,6 +215,188 @@ async def handle_mcp_request(request: Request):
 
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
+
+
+# --- TRON Developer Docs 搜索 (developers.tron.network) ---
+
+# ReadMe 原生搜索 API（无需身份验证）
+TRON_DOCS_SEARCH_API = "https://developers.tron.network/tron/api-next/v2/search"
+
+# 缓存
+tron_docs_cache = []
+tron_docs_cache_time = None
+CACHE_TTL_SECONDS = 3600  # 1小时缓存
+
+
+async def fetch_all_tron_docs() -> list:
+    """抓取所有 TRON 文档页面索引（用于本地搜索）"""
+    global tron_docs_cache, tron_docs_cache_time
+    
+    # 检查缓存
+    if tron_docs_cache and tron_docs_cache_time:
+        if (datetime.now() - tron_docs_cache_time).seconds < CACHE_TTL_SECONDS:
+            return tron_docs_cache
+    
+    # 关键文档页面列表
+    key_pages = [
+        "/docs/getting-start",
+        "/docs/concensus",
+        "/docs/resource-model",
+        "/docs/tvm",
+        "/docs/tron-ide",
+        "/docs/build-a-web3-app",
+        "/docs/networks",
+        "/docs/introduction",
+        "/docs/account",
+        "/docs/transaction",
+        "/docs/smart-contract",
+        "/docs/trc10-token",
+        "/docs/trc20-token",
+        "/docs/super-representative",
+        "/reference/json-rpc-api-overview",
+    ]
+    
+    semaphore = asyncio.Semaphore(3)  # 限制并发
+    
+    async def fetch_single_page(path: str) -> dict:
+        async with semaphore:
+            url = f"https://developers.tron.network{path}"
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    }
+                    response = await client.get(url, headers=headers)
+                    html = response.text
+                    
+                    # 提取标题
+                    import re
+                    title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.I)
+                    title = title_match.group(1).replace(" | TRON Developer Hub", "") if title_match else path
+                    
+                    # 提取主要内容 (简单文本提取)
+                    content = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.I|re.S)
+                    content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.I|re.S)
+                    content = re.sub(r'<[^>]+>', ' ', content)
+                    content = re.sub(r'\s+', ' ', content).strip()[:3000]
+                    
+                    return {
+                        "title": title,
+                        "location": path,
+                        "text": content
+                    }
+            except Exception as e:
+                return {"title": path, "location": path, "text": "", "error": str(e)}
+    
+    tasks = [fetch_single_page(path) for path in key_pages]
+    results = await asyncio.gather(*tasks)
+    
+    tron_docs_cache = [r for r in results if not r.get("error")]
+    tron_docs_cache_time = datetime.now()
+    
+    return tron_docs_cache
+
+
+async def search_tron_developer_docs(query: str, limit: int = 5) -> str:
+    """搜索 TRON 开发者文档"""
+    if not query.strip():
+        return "Error: Query is required."
+    
+    limit = min(max(limit, 1), 10)  # 限制 1-10
+    
+    # 优先使用 ReadMe 原生搜索 API（无需身份验证）
+    try:
+        return await search_via_readme_api(query, limit)
+    except Exception as e:
+        # API 搜索失败，回退到本地缓存搜索
+        try:
+            return await search_via_local_cache(query, limit)
+        except Exception as local_error:
+            return f"Error searching documentation: {str(e)}"
+
+
+async def search_via_readme_api(query: str, limit: int) -> str:
+    """通过 ReadMe 原生搜索 API 搜索（无需身份验证）"""
+    # 不指定 version，让服务器自动返回最新版本
+    params = {
+        "query": query
+    }
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json"
+    }
+    
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(TRON_DOCS_SEARCH_API, params=params, headers=headers)
+        data = response.json()
+        
+        total = data.get("total", 0)
+        hits = data.get("data", [])
+        
+        if not hits:
+            return f"No results found for '{query}'."
+        
+        results = []
+        for hit in hits[:limit]:
+            title = hit.get("title", "Untitled")
+            url = hit.get("url", {}).get("full", "")
+            if not url:
+                url = f"https://developers.tron.network{hit.get('url', {}).get('relative', '')}"
+            
+            # 从 highlights 提取摘要
+            highlights = hit.get("highlights", [])
+            excerpt_parts = []
+            for h in highlights:
+                if h.get("type") == "text":
+                    excerpt_parts.append(h.get("value", ""))
+            excerpt = " ".join(excerpt_parts)[:300]
+            
+            results.append(f"### {title}\nURL: {url}\nExcerpt: {excerpt}...")
+        
+        return f"## TRON Developer Docs Results ({min(len(hits), limit)} of {total} found)\n\n" + "\n\n".join(results)
+
+
+async def search_via_local_cache(query: str, limit: int) -> str:
+    """通过本地缓存搜索（备用方案）"""
+    docs = await fetch_all_tron_docs()
+    
+    if not docs:
+        return "Error: Failed to load documentation."
+    
+    # 简单搜索逻辑
+    query_words = [w.strip().lower() for w in query.split() if len(w.strip()) > 1]
+    if not query_words:
+        query_words = [query.lower()]
+    
+    hits = []
+    for doc in docs:
+        title_lower = doc['title'].lower()
+        text_lower = doc['text'].lower()
+        
+        score = 0
+        for word in query_words:
+            if word in title_lower:
+                score += 3  # 标题匹配权重更高
+            if word in text_lower:
+                score += 1
+        
+        if score > 0:
+            hits.append((score, doc))
+    
+    # 按分数排序
+    hits.sort(key=lambda x: x[0], reverse=True)
+    
+    if not hits:
+        return "No relevant documentation found."
+    
+    results = []
+    for score, doc in hits[:limit]:
+        excerpt = doc['text'][:200]
+        url = f"https://developers.tron.network{doc['location']}"
+        results.append(f"### {doc['title']}\nURL: {url}\nExcerpt: {excerpt}...")
+    
+    return f"## TRON Developer Docs Results ({len(results)} found, via local cache)\n\n" + "\n\n".join(results)
 
 
 def perform_search(query: str):
