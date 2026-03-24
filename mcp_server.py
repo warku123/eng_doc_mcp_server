@@ -214,7 +214,7 @@ async def handle_mcp_request(request: Request):
         return JSONResponse(status_code=400, content={"error": str(e)})
 
 
-def perform_search(query: str, index_path: str, base_url: str)):
+def perform_search(query: str, index_path: str, base_url: str):
     """搜索本地文档"""
     if not os.path.exists(index_path):
         return "Error: Index not found. Run 'mkdocs build'."
