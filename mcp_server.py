@@ -22,7 +22,18 @@ TRON_RPC_URL = os.getenv("TRON_RPC_URL", "https://api.trongrid.io")
 TOOLS_DEFINITION = [
     {
         "name": "SearchJavaTron",
-        "description": "Search across the java-tron developer documentation to find node setup and API references.",
+        "description": "Search across the java-tron documentation to find the basic principles of java-tron, and how to deploy a java-tron node and interact with it.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "A query to search the content with."}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "SearchDevelopJavaTron",
+        "description": "Search across the java-tron developer documentation to find how to deploy and interact with a java-tron node, and how to develop DApps based on java-tron.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -124,6 +135,8 @@ TOOLS_DEFINITION = [
 INDEX_PATH = "./site/search/search_index.json"
 BASE_URL = "https://tronprotocol.github.io/documentation-en/"
 
+DEVELOP_INDEX_PATH = "./site/search/develop_search_index.json"
+DEVELOP_BASE_URL = "https://developers.tron.network/"
 
 @app.get("/mcp")
 async def get_mcp_config():
@@ -176,7 +189,10 @@ async def handle_mcp_request(request: Request):
             
             if tool_name == "SearchJavaTron":
                 query = arguments.get("query", "")
-                result_text = perform_search(query)
+                result_text = perform_search(query, INDEX_PATH, BASE_URL)
+            elif tool_name == "SearchDevelopJavaTron":
+                query = arguments.get("query", "")
+                result_text = perform_search(query, DEVELOP_INDEX_PATH, DEVELOP_BASE_URL)
             elif tool_name == "GetBlock":
                 result_text = await get_block(
                     arguments.get("block_number"),
@@ -300,21 +316,38 @@ async def fetch_all_tron_docs() -> list:
 
 
 async def search_tron_developer_docs(query: str, limit: int = 5) -> str:
-    """搜索 TRON 开发者文档"""
+    """搜索 TRON 开发者文档 - 三层降级策略"""
     if not query.strip():
         return "Error: Query is required."
     
     limit = min(max(limit, 1), 10)  # 限制 1-10
+    errors = []
     
-    # 优先使用 ReadMe 原生搜索 API（无需身份验证）
+    # 第1层：MkDocs 本地索引搜索（主要方案）
+    if os.path.exists(DEVELOP_INDEX_PATH):
+        try:
+            result = perform_search(query, DEVELOP_INDEX_PATH, DEVELOP_BASE_URL)
+            if result and not result.startswith("Error"):
+                return result
+        except Exception as e:
+            errors.append(f"MkDocs index: {str(e)}")
+    else:
+        errors.append(f"MkDocs index: File not found at {DEVELOP_INDEX_PATH}")
+    
+    # 第2层：本地缓存搜索（备用方案）
+    try:
+        return await search_via_local_cache(query, limit)
+    except Exception as e:
+        errors.append(f"Local cache: {str(e)}")
+    
+    # 第3层：ReadMe API 实时搜索（最备用方案）
     try:
         return await search_via_readme_api(query, limit)
     except Exception as e:
-        # API 搜索失败，回退到本地缓存搜索
-        try:
-            return await search_via_local_cache(query, limit)
-        except Exception as local_error:
-            return f"Error searching documentation. API error: {str(e)}; Local cache error: {str(local_error)}"
+        errors.append(f"ReadMe API: {str(e)}")
+    
+    # 所有方案都失败
+    return f"Error searching documentation. All methods failed: {'; '.join(errors)}"
 
 
 async def search_via_readme_api(query: str, limit: int) -> str:
@@ -402,11 +435,11 @@ async def search_via_local_cache(query: str, limit: int) -> str:
     return f"## TRON Developer Docs Results ({len(results)} found, via local cache)\n\n" + "\n\n".join(results)
 
 
-def perform_search(query: str):
+def perform_search(query: str, index_path: str, base_url: str):
     """搜索本地文档"""
-    if not os.path.exists(INDEX_PATH):
+    if not os.path.exists(index_path):
         return "Error: Index not found. Run 'mkdocs build'."
-    with open(INDEX_PATH, 'r', encoding='utf-8') as f:
+    with open(index_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     # 按空格分词，每个词都要在 title 或 text 里出现（放宽匹配）
@@ -421,7 +454,7 @@ def perform_search(query: str):
         # 所有词都在该 doc 中出现即算命中
         if all(word in title_lower or word in text_lower for word in query_words):
             excerpt = (doc.get('text') or '')[:200]
-            hits.append(f"### {doc['title']}\nURL: {BASE_URL}{doc['location']}\nExcerpt: {excerpt}...")
+            hits.append(f"### {doc['title']}\nURL: {base_url}{doc['location']}\nExcerpt: {excerpt}...")
             if len(hits) >= 5:
                 break
 
