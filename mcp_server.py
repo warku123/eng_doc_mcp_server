@@ -177,11 +177,20 @@ async def handle_mcp_request(request: Request):
             
             if tool_name == "SearchJavaTron":
                 query = arguments.get("query", "")
-                result_text = perform_search(query, INDEX_PATH, BASE_URL)
+                limit = arguments.get("limit", 5)
+                # java-tron 文档只使用 MkDocs 索引
+                result_text = await search_docs_three_tier(
+                    query, limit, INDEX_PATH, BASE_URL, 
+                    enable_cache=False, enable_api=False
+                )
             elif tool_name == "SearchDevelopJavaTron":
                 query = arguments.get("query", "")
                 limit = arguments.get("limit", 5)
-                result_text = await search_develop_java_tron(query, limit)
+                # 开发者文档使用完整三层降级
+                result_text = await search_docs_three_tier(
+                    query, limit, DEVELOP_INDEX_PATH, DEVELOP_BASE_URL,
+                    enable_cache=True, enable_api=True
+                )
             elif tool_name == "GetBlock":
                 result_text = await get_block(
                     arguments.get("block_number"),
@@ -299,39 +308,59 @@ async def fetch_all_tron_docs() -> list:
     return tron_docs_cache
 
 
-async def search_develop_java_tron(query: str, limit: int = 5) -> str:
-    """搜索 TRON 开发者文档 - 三层降级策略"""
+async def search_docs_three_tier(
+    query: str, 
+    limit: int, 
+    index_path: str, 
+    base_url: str,
+    enable_cache: bool = False,
+    enable_api: bool = False
+) -> str:
+    """统一的三层文档搜索函数
+    
+    Args:
+        query: 搜索关键词
+        limit: 返回结果数量
+        index_path: MkDocs 索引文件路径
+        base_url: 文档基础 URL
+        enable_cache: 是否启用本地缓存搜索（第2层）
+        enable_api: 是否启用 ReadMe API 搜索（第3层）
+    """
     if not query.strip():
         return "Error: Query is required."
     
-    limit = min(max(limit, 1), 10)  # 限制 1-10
+    limit = min(max(limit, 1), 10)
     errors = []
     
     # 第1层：MkDocs 本地索引搜索（主要方案）
-    if os.path.exists(DEVELOP_INDEX_PATH):
+    if os.path.exists(index_path):
         try:
-            result = perform_search(query, DEVELOP_INDEX_PATH, DEVELOP_BASE_URL)
-            if result and not result.startswith("Error"):
+            result = perform_search(query, index_path, base_url, limit)
+            if result and not result.startswith("Error") and result != "No relevant documentation found.":
                 return result
         except Exception as e:
             errors.append(f"MkDocs index: {str(e)}")
     else:
-        errors.append(f"MkDocs index: File not found at {DEVELOP_INDEX_PATH}")
+        errors.append(f"MkDocs index: File not found at {index_path}")
     
-    # 第2层：本地缓存搜索（备用方案）
-    try:
-        return await search_via_local_cache(query, limit)
-    except Exception as e:
-        errors.append(f"Local cache: {str(e)}")
+    # 第2层：本地缓存搜索（可选）
+    if enable_cache:
+        try:
+            return await search_via_local_cache(query, limit)
+        except Exception as e:
+            errors.append(f"Local cache: {str(e)}")
     
-    # 第3层：ReadMe API 实时搜索（最备用方案）
-    try:
-        return await search_via_readme_api(query, limit)
-    except Exception as e:
-        errors.append(f"ReadMe API: {str(e)}")
+    # 第3层：ReadMe API 实时搜索（可选）
+    if enable_api:
+        try:
+            return await search_via_readme_api(query, limit)
+        except Exception as e:
+            errors.append(f"ReadMe API: {str(e)}")
     
     # 所有方案都失败
-    return f"Error searching documentation. All methods failed: {'; '.join(errors)}"
+    if errors:
+        return f"Error searching documentation. All methods failed: {'; '.join(errors)}"
+    return "No relevant documentation found."
 
 
 async def search_via_readme_api(query: str, limit: int) -> str:
@@ -419,14 +448,14 @@ async def search_via_local_cache(query: str, limit: int) -> str:
     return f"## TRON Developer Docs Results ({len(results)} found, via local cache)\n\n" + "\n\n".join(results)
 
 
-def perform_search(query: str, index_path: str, base_url: str):
-    """搜索本地文档"""
+def perform_search(query: str, index_path: str, base_url: str, limit: int = 5):
+    """搜索本地文档 - 基于分数的匹配"""
     if not os.path.exists(index_path):
         return "Error: Index not found. Run 'mkdocs build'."
     with open(index_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    # 按空格分词，每个词都要在 title 或 text 里出现（放宽匹配）
+    # 按空格分词
     query_words = [w.strip() for w in query.lower().split() if len(w.strip()) > 1]
     if not query_words:
         query_words = [query.lower()]
@@ -435,14 +464,31 @@ def perform_search(query: str, index_path: str, base_url: str):
     for doc in data['docs']:
         title_lower = doc['title'].lower()
         text_lower = doc.get('text', '').lower()
-        # 所有词都在该 doc 中出现即算命中
-        if all(word in title_lower or word in text_lower for word in query_words):
+        
+        # 分数匹配：标题命中 +3，内容命中 +1
+        score = 0
+        for word in query_words:
+            if word in title_lower:
+                score += 3
+            if word in text_lower:
+                score += 1
+        
+        if score > 0:
             excerpt = (doc.get('text') or '')[:200]
-            hits.append(f"### {doc['title']}\nURL: {base_url}{doc['location']}\nExcerpt: {excerpt}...")
-            if len(hits) >= 5:
-                break
-
-    return "\n\n".join(hits) if hits else "No relevant documentation found."
+            hits.append((score, doc['title'], doc['location'], excerpt))
+    
+    # 按分数排序
+    hits.sort(key=lambda x: x[0], reverse=True)
+    
+    if not hits:
+        return "No relevant documentation found."
+    
+    # 取前 limit 个结果
+    results = []
+    for score, title, location, excerpt in hits[:limit]:
+        results.append(f"### {title}\nURL: {base_url}{location}\nExcerpt: {excerpt}...")
+    
+    return "\n\n".join(results)
 
 
 async def tron_rpc_request(endpoint: str, payload: dict = None, method: str = "POST") -> dict:
