@@ -240,7 +240,7 @@ async def fetch_all_tron_docs() -> list:
     # 关键文档页面列表
     key_pages = [
         "/docs/getting-start",
-        "/docs/concensus",
+        "/docs/consensus",
         "/docs/resource-model",
         "/docs/tvm",
         "/docs/tron-ide",
@@ -257,40 +257,41 @@ async def fetch_all_tron_docs() -> list:
     ]
     
     semaphore = asyncio.Semaphore(3)  # 限制并发
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
     
-    async def fetch_single_page(path: str) -> dict:
+    async def fetch_single_page(client: httpx.AsyncClient, path: str) -> dict:
         async with semaphore:
             url = f"https://developers.tron.network{path}"
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                    }
-                    response = await client.get(url, headers=headers)
-                    response.raise_for_status()
-                    html = response.text
-                    
-                    # 提取标题
-                    import re
-                    title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.I)
-                    title = title_match.group(1).replace(" | TRON Developer Hub", "") if title_match else path
-                    
-                    # 提取主要内容 (简单文本提取)
-                    content = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.I|re.S)
-                    content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.I|re.S)
-                    content = re.sub(r'<[^>]+>', ' ', content)
-                    content = re.sub(r'\s+', ' ', content).strip()[:3000]
-                    
-                    return {
-                        "title": title,
-                        "location": path,
-                        "text": content
-                    }
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                html = response.text
+                
+                # 提取标题
+                import re
+                title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.I)
+                title = title_match.group(1).replace(" | TRON Developer Hub", "") if title_match else path
+                
+                # 提取主要内容 (简单文本提取)
+                content = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.I|re.S)
+                content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.I|re.S)
+                content = re.sub(r'<[^>]+>', ' ', content)
+                content = re.sub(r'\s+', ' ', content).strip()[:3000]
+                
+                return {
+                    "title": title,
+                    "location": path,
+                    "text": content
+                }
             except Exception as e:
                 return {"title": path, "location": path, "text": "", "error": str(e)}
     
-    tasks = [fetch_single_page(path) for path in key_pages]
-    results = await asyncio.gather(*tasks)
+    # 复用 HTTP 客户端连接池
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        tasks = [fetch_single_page(client, path) for path in key_pages]
+        results = await asyncio.gather(*tasks)
     
     tron_docs_cache = [r for r in results if not r.get("error")]
     tron_docs_cache_time = datetime.now()
@@ -313,7 +314,7 @@ async def search_tron_developer_docs(query: str, limit: int = 5) -> str:
         try:
             return await search_via_local_cache(query, limit)
         except Exception as local_error:
-            return f"Error searching documentation: {str(e)}"
+            return f"Error searching documentation. API error: {str(e)}; Local cache error: {str(local_error)}"
 
 
 async def search_via_readme_api(query: str, limit: int) -> str:

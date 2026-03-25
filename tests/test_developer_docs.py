@@ -8,6 +8,7 @@ import pytest
 TARGET_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001/mcp")
 
 
+@pytest.mark.asyncio
 async def test_search_developer_docs_basic():
     """测试基本的开发者文档搜索"""
     async with httpx.AsyncClient() as client:
@@ -43,6 +44,7 @@ async def test_search_developer_docs_basic():
         print()
 
 
+@pytest.mark.asyncio
 async def test_search_developer_docs_smart_contract():
     """测试智能合约相关搜索"""
     async with httpx.AsyncClient() as client:
@@ -72,6 +74,7 @@ async def test_search_developer_docs_smart_contract():
         print()
 
 
+@pytest.mark.asyncio
 async def test_search_developer_docs_wallet():
     """测试钱包集成相关搜索"""
     async with httpx.AsyncClient() as client:
@@ -89,20 +92,18 @@ async def test_search_developer_docs_wallet():
         }
         
         response = await client.post(TARGET_URL, json=payload, headers={"Content-Type": "application/json"})
-        if response.status_code == 200:
-            result = response.json()
-            print("✅ 钱包集成搜索成功!")
-            content = result.get("result", {}).get("content", [{}])[0].get("text", "")
-            print("返回结果:")
-            print("-" * 50)
-            print(content[:800] + "..." if len(content) > 800 else content)
-            print("-" * 50)
-        else:
-            print(f"❌ 失败: {response.status_code}")
-            print(response.text)
+        assert response.status_code == 200, f"请求失败: {response.status_code} - {response.text}"
+        
+        result = response.json()
+        content = result["result"]["content"][0].get("text", "")
+        assert content, "搜索结果为空"
+        
+        print("✅ 钱包集成搜索成功!")
+        print(content[:800] + "..." if len(content) > 800 else content)
         print()
 
 
+@pytest.mark.asyncio
 async def test_search_developer_docs_resource():
     """测试资源模型相关搜索"""
     async with httpx.AsyncClient() as client:
@@ -120,20 +121,18 @@ async def test_search_developer_docs_resource():
         }
         
         response = await client.post(TARGET_URL, json=payload, headers={"Content-Type": "application/json"})
-        if response.status_code == 200:
-            result = response.json()
-            print("✅ 资源模型搜索成功!")
-            content = result.get("result", {}).get("content", [{}])[0].get("text", "")
-            print("返回结果:")
-            print("-" * 50)
-            print(content[:800] + "..." if len(content) > 800 else content)
-            print("-" * 50)
-        else:
-            print(f"❌ 失败: {response.status_code}")
-            print(response.text)
+        assert response.status_code == 200, f"请求失败: {response.status_code} - {response.text}"
+        
+        result = response.json()
+        content = result["result"]["content"][0].get("text", "")
+        assert content, "搜索结果为空"
+        
+        print("✅ 资源模型搜索成功!")
+        print(content[:800] + "..." if len(content) > 800 else content)
         print()
 
 
+@pytest.mark.asyncio
 async def test_search_developer_docs_empty_query():
     """测试空查询的处理 - 应返回错误信息"""
     async with httpx.AsyncClient() as client:
@@ -163,6 +162,7 @@ async def test_search_developer_docs_empty_query():
         print()
 
 
+@pytest.mark.asyncio
 async def test_tools_list_includes_new_tool():
     """验证 tools/list 包含新添加的工具"""
     async with httpx.AsyncClient() as client:
@@ -175,27 +175,24 @@ async def test_tools_list_includes_new_tool():
         }
         
         response = await client.post(TARGET_URL, json=payload, headers={"Content-Type": "application/json"})
-        if response.status_code == 200:
-            result = response.json()
-            tools = result.get("result", {}).get("tools", [])
-            tool_names = [t.get("name") for t in tools]
-            
-            if "SearchTronDeveloperDocs" in tool_names:
-                print("✅ SearchTronDeveloperDocs 已在工具列表中!")
-                # 显示工具定义
-                for tool in tools:
-                    if tool.get("name") == "SearchTronDeveloperDocs":
-                        print("工具定义:")
-                        print(json.dumps(tool, indent=2, ensure_ascii=False))
-            else:
-                print("❌ SearchTronDeveloperDocs 不在工具列表中")
-                print(f"可用工具: {tool_names}")
-        else:
-            print(f"❌ 失败: {response.status_code}")
-            print(response.text)
+        assert response.status_code == 200, f"请求失败: {response.status_code} - {response.text}"
+        
+        result = response.json()
+        tools = result.get("result", {}).get("tools", [])
+        tool_names = [t.get("name") for t in tools]
+        
+        assert "SearchTronDeveloperDocs" in tool_names, f"SearchTronDeveloperDocs 不在工具列表中。可用工具: {tool_names}"
+        
+        print("✅ SearchTronDeveloperDocs 已在工具列表中!")
+        # 显示工具定义
+        for tool in tools:
+            if tool.get("name") == "SearchTronDeveloperDocs":
+                print("工具定义:")
+                print(json.dumps(tool, indent=2, ensure_ascii=False))
         print()
 
 
+@pytest.mark.asyncio
 @pytest.mark.skipif(
     os.getenv("SKIP_EXTERNAL_API_TESTS") == "1",
     reason="跳过外部 API 测试 (设置 SKIP_EXTERNAL_API_TESTS=1 启用)"
