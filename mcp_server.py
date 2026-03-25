@@ -117,18 +117,6 @@ TOOLS_DEFINITION = [
             "type": "object",
             "properties": {}
         }
-    },
-    {
-        "name": "SearchTronDeveloperDocs",
-        "description": "Search TRON developer documentation at developers.tron.network. Covers DApp development, smart contracts, wallets, tools (TronBox, TronWeb, TronLink), testnets, and integration guides.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Search query for TRON documentation"},
-                "limit": {"type": "integer", "description": "Number of results to return (1-10)", "default": 5}
-            },
-            "required": ["query"]
-        }
     }
 ]
 
@@ -192,7 +180,8 @@ async def handle_mcp_request(request: Request):
                 result_text = perform_search(query, INDEX_PATH, BASE_URL)
             elif tool_name == "SearchDevelopJavaTron":
                 query = arguments.get("query", "")
-                result_text = perform_search(query, DEVELOP_INDEX_PATH, DEVELOP_BASE_URL)
+                limit = arguments.get("limit", 5)
+                result_text = await search_develop_java_tron(query, limit)
             elif tool_name == "GetBlock":
                 result_text = await get_block(
                     arguments.get("block_number"),
@@ -207,11 +196,6 @@ async def handle_mcp_request(request: Request):
                 result_text = await get_account_resource(arguments.get("address"))
             elif tool_name == "GetNowBlock":
                 result_text = await get_now_block()
-            elif tool_name == "SearchTronDeveloperDocs":
-                result_text = await search_tron_developer_docs(
-                    arguments.get("query", ""),
-                    arguments.get("limit", 5)
-                )
             else:
                 result_text = f"Unknown tool: {tool_name}"
             
@@ -315,7 +299,7 @@ async def fetch_all_tron_docs() -> list:
     return tron_docs_cache
 
 
-async def search_tron_developer_docs(query: str, limit: int = 5) -> str:
+async def search_develop_java_tron(query: str, limit: int = 5) -> str:
     """搜索 TRON 开发者文档 - 三层降级策略"""
     if not query.strip():
         return "Error: Query is required."
