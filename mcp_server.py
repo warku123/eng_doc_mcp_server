@@ -234,7 +234,7 @@ async def fetch_all_tron_docs() -> list:
     
     # 检查缓存
     if tron_docs_cache and tron_docs_cache_time:
-        if (datetime.now() - tron_docs_cache_time).seconds < CACHE_TTL_SECONDS:
+        if datetime.now() - tron_docs_cache_time < timedelta(seconds=CACHE_TTL_SECONDS):
             return tron_docs_cache
     
     # 关键文档页面列表
@@ -267,6 +267,7 @@ async def fetch_all_tron_docs() -> list:
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                     }
                     response = await client.get(url, headers=headers)
+                    response.raise_for_status()
                     html = response.text
                     
                     # 提取标题
@@ -329,6 +330,7 @@ async def search_via_readme_api(query: str, limit: int) -> str:
     
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.get(TRON_DOCS_SEARCH_API, params=params, headers=headers)
+        response.raise_for_status()
         data = response.json()
         
         total = data.get("total", 0)
