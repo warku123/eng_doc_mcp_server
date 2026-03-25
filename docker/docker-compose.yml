@@ -15,6 +15,10 @@ services:
       - PYTHONUNBUFFERED=1
       - TRON_RPC_URL=${TRON_RPC_URL:-https://api.trongrid.io}
     restart: unless-stopped
+    # Optional: mount custom index files to override the default ones
+    # volumes:
+    #   - ./site/search/search_index.json:/app/site/search/search_index.json:ro
+    #   - ./site/search/develop_search_index.json:/app/site/search/develop_search_index.json:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/mcp"]
       interval: 30s

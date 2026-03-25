@@ -11,12 +11,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY mcp_server.py .
+COPY doc_search.py .
+COPY index_fetcher.py .
 
-# Create docs directory and download index during build
+# Create docs directory and download indexes during build
 RUN mkdir -p site/search && \
     curl -L -o site/search/search_index.json \
     https://raw.githubusercontent.com/tronprotocol/documentation-en/gh-pages/search/search_index.json && \
-    echo "Index downloaded successfully"
+    curl -L -o site/search/develop_search_index.json \
+    https://raw.githubusercontent.com/abn2357/documentation-developers/main/site/search/develop_search_index.json && \
+    echo "All indexes downloaded successfully"
 
 # Expose port
 EXPOSE 8001
