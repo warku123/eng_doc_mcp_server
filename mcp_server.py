@@ -18,13 +18,6 @@ SERVER_INFO = {
 # TRON RPC 配置
 TRON_RPC_URL = os.getenv("TRON_RPC_URL", "https://api.trongrid.io")
 
-# 文档索引配置
-INDEX_PATH = "./site/search/search_index.json"
-BASE_URL = "https://tronprotocol.github.io/documentation-en/"
-
-DEVELOP_INDEX_PATH = "./site/search/develop_search_index.json"
-DEVELOP_BASE_URL = "https://developers.tron.network/"
-
 # 工具定义
 TOOLS_DEFINITION = [
     {
@@ -180,18 +173,20 @@ async def handle_mcp_request(request: Request):
             if tool_name == "SearchJavaTron":
                 query = arguments.get("query", "")
                 limit = arguments.get("limit", 5)
-                # java-tron 文档只使用 MkDocs 索引
+                # java-tron 文档使用配置中的策略
                 result_text = await search_docs_three_tier(
-                    query, limit, INDEX_PATH, BASE_URL, 
-                    enable_cache=False, enable_api=False
+                    source_name="java_tron",
+                    query=query,
+                    limit=limit
                 )
             elif tool_name == "SearchDevelopJavaTron":
                 query = arguments.get("query", "")
                 limit = arguments.get("limit", 5)
-                # 开发者文档使用完整三层降级
+                # 开发者文档使用配置中的策略
                 result_text = await search_docs_three_tier(
-                    query, limit, DEVELOP_INDEX_PATH, DEVELOP_BASE_URL,
-                    enable_cache=True, enable_api=True
+                    source_name="tron_developers",
+                    query=query,
+                    limit=limit
                 )
             elif tool_name == "GetBlock":
                 result_text = await get_block(

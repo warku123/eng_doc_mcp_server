@@ -2,73 +2,20 @@
 import os
 import json
 import httpx
-import asyncio
-from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-# ReadMe 原生搜索 API（无需身份验证）
-TRON_DOCS_SEARCH_API = "https://developers.tron.network/tron/api-next/v2/search"
-
-
-async def search_docs_three_tier(
-    query: str, 
-    limit: int, 
-    index_path: str, 
-    base_url: str,
-    enable_cache: bool = False,
-    enable_api: bool = False
-) -> str:
-    """统一的三层文档搜索函数
-    
-    Args:
-        query: 搜索关键词
-        limit: 返回结果数量
-        index_path: MkDocs 索引文件路径
-        base_url: 文档基础 URL
-        enable_cache: 是否启用本地缓存搜索（第2层）
-        enable_api: 是否启用 ReadMe API 搜索（第3层）
-    """
-    if not query.strip():
-        return "Error: Query is required."
-    
-    limit = min(max(limit, 1), 10)
-    errors = []
-    
-    # 第1层：MkDocs 本地索引搜索（主要方案）
-    if os.path.exists(index_path):
-        try:
-            result = perform_search(query, index_path, base_url, limit)
-            if result and not result.startswith("Error") and result != "No relevant documentation found.":
-                return result
-        except Exception as e:
-            errors.append(f"MkDocs index: {str(e)}")
-    else:
-        errors.append(f"MkDocs index: File not found at {index_path}")
-    
-    # 第2层：本地缓存搜索（可选）
-    if enable_cache:
-        try:
-            return await search_via_local_cache(query, limit)
-        except Exception as e:
-            errors.append(f"Local cache: {str(e)}")
-    
-    # 第3层：ReadMe API 实时搜索（可选）
-    if enable_api:
-        try:
-            return await search_via_readme_api(query, limit)
-        except Exception as e:
-            errors.append(f"ReadMe API: {str(e)}")
-    
-    # 所有方案都失败
-    if errors:
-        return f"Error searching documentation. All methods failed: {'; '.join(errors)}"
-    return "No relevant documentation found."
+from index_fetcher import fetch_all_docs
+from config import (
+    get_doc_source_config,
+    get_general_config,
+    get_max_limit
+)
 
 
 def perform_search(query: str, index_path: str, base_url: str, limit: int = 5) -> str:
     """搜索本地 MkDocs 索引 - 基于分数的匹配"""
     if not os.path.exists(index_path):
-        return "Error: Index not found. Run 'mkdocs build'."
+        return f"Error: Index not found at {index_path}. Run 'mkdocs build'."
     
     with open(index_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -109,24 +56,23 @@ def perform_search(query: str, index_path: str, base_url: str, limit: int = 5) -
     return "\n\n".join(results)
 
 
-# ==================== 本地缓存搜索 ====================
-
-# 缓存
-_tron_docs_cache: List[Dict[str, Any]] = []
-_tron_docs_cache_time: datetime = None
-CACHE_TTL_SECONDS = 3600  # 1小时缓存
-
-
-async def search_via_local_cache(query: str, limit: int) -> str:
+async def search_via_local_cache(
+    query: str,
+    limit: int,
+    source_name: str = 'tron_developers',
+    config_path: str = "./docs_config.yaml"
+) -> str:
     """通过本地缓存搜索（备用方案）"""
-    from index_fetcher import fetch_all_tron_docs
-    
-    docs = await fetch_all_tron_docs()
+    docs = await fetch_all_docs(source_name, config_path)
     
     if not docs:
-        return "Error: Failed to load documentation."
+        return "Error: Failed to load documentation cache."
     
-    # 简单搜索逻辑
+    # 获取配置中的 base_url
+    config = get_doc_source_config(source_name, config_path)
+    base_url = config.get('base_url', 'https://developers.tron.network/')
+    
+    # 搜索逻辑
     query_words = [w.strip().lower() for w in query.split() if len(w.strip()) > 1]
     if not query_words:
         query_words = [query.lower()]
@@ -139,7 +85,7 @@ async def search_via_local_cache(query: str, limit: int) -> str:
         score = 0
         for word in query_words:
             if word in title_lower:
-                score += 3  # 标题匹配权重更高
+                score += 3
             if word in text_lower:
                 score += 1
         
@@ -155,25 +101,34 @@ async def search_via_local_cache(query: str, limit: int) -> str:
     results = []
     for score, doc in hits[:limit]:
         excerpt = doc['text'][:200]
-        url = f"https://developers.tron.network{doc['location']}"
+        url = f"{base_url.rstrip('/')}{doc['location']}"
         results.append(f"### {doc['title']}\nURL: {url}\nExcerpt: {excerpt}...")
     
     return f"## TRON Developer Docs Results ({len(results)} found, via local cache)\n\n" + "\n\n".join(results)
 
 
-# ==================== ReadMe API 搜索 ====================
-
-async def search_via_readme_api(query: str, limit: int) -> str:
+async def search_via_readme_api(
+    query: str,
+    limit: int,
+    config_path: str = "./docs_config.yaml"
+) -> str:
     """通过 ReadMe 原生搜索 API 搜索（无需身份验证）"""
-    params = {"query": query}
+    # 获取 API 配置
+    config = get_doc_source_config('tron_developers', config_path)
+    api_config = config.get('api_config', {})
+    endpoint = api_config.get('endpoint')
     
+    if not endpoint:
+        return "Error: API endpoint not configured."
+    
+    params = {"query": query}
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json"
     }
     
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(TRON_DOCS_SEARCH_API, params=params, headers=headers)
+        response = await client.get(endpoint, params=params, headers=headers)
         response.raise_for_status()
         data = response.json()
         
@@ -201,3 +156,63 @@ async def search_via_readme_api(query: str, limit: int) -> str:
             results.append(f"### {title}\nURL: {url}\nExcerpt: {excerpt}...")
         
         return f"## TRON Developer Docs Results ({min(len(hits), limit)} of {total} found)\n\n" + "\n\n".join(results)
+
+
+async def search_docs_three_tier(
+    source_name: str,
+    query: str,
+    limit: int = 5,
+    config_path: str = "./docs_config.yaml"
+) -> str:
+    """
+    统一的三层文档搜索函数
+    
+    Args:
+        source_name: 文档源名称（如 'java_tron', 'tron_developers'）
+        query: 搜索关键词
+        limit: 返回结果数量
+        config_path: 配置文件路径
+    """
+    if not query.strip():
+        return "Error: Query is required."
+    
+    # 加载配置
+    config = get_doc_source_config(source_name, config_path)
+    limit = min(max(limit, 1), get_max_limit(config_path))
+    
+    strategy = config.get('search_strategy', {})
+    index_path = config.get('index_path', '')
+    base_url = config.get('base_url', '')
+    
+    errors = []
+    
+    # 第1层：MkDocs 本地索引搜索
+    if strategy.get('enable_mkdocs', False):
+        if os.path.exists(index_path):
+            try:
+                result = perform_search(query, index_path, base_url, limit)
+                if result and not result.startswith("Error") and result != "No relevant documentation found.":
+                    return result
+            except Exception as e:
+                errors.append(f"MkDocs index: {str(e)}")
+        else:
+            errors.append(f"MkDocs index: File not found at {index_path}")
+    
+    # 第2层：本地缓存搜索
+    if strategy.get('enable_cache', False):
+        try:
+            return await search_via_local_cache(query, limit, source_name, config_path)
+        except Exception as e:
+            errors.append(f"Local cache: {str(e)}")
+    
+    # 第3层：ReadMe API 实时搜索
+    if strategy.get('enable_api', False):
+        try:
+            return await search_via_readme_api(query, limit, config_path)
+        except Exception as e:
+            errors.append(f"ReadMe API: {str(e)}")
+    
+    # 所有方案都失败
+    if errors:
+        return f"Error searching documentation. All methods failed: {'; '.join(errors)}"
+    return "No relevant documentation found."

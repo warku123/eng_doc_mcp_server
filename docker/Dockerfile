@@ -13,6 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY mcp_server.py .
 COPY doc_search.py .
 COPY index_fetcher.py .
+COPY config.py .
+COPY docs_config.yaml .
 
 # Create docs directory and download indexes during build
 RUN mkdir -p site/search && \

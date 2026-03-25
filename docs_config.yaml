@@ -1,0 +1,60 @@
+# TRON 文档搜索配置文件
+# 定义可用的文档源及其搜索策略
+
+doc_sources:
+  java_tron:
+    name: "java-tron Documentation"
+    description: "Basic principles of java-tron, node deployment and interaction"
+    base_url: "https://tronprotocol.github.io/documentation-en/"
+    index_path: "./site/search/search_index.json"
+    # 搜索策略
+    search_strategy:
+      enable_mkdocs: true      # 第1层：MkDocs 本地索引
+      enable_cache: false      # 第2层：本地缓存搜索
+      enable_api: false        # 第3层：在线 API 搜索
+    # 缓存抓取配置（enable_cache 为 true 时有效）
+    cache_config:
+      pages: []                # java-tron 不使用缓存抓取
+      base_url: null
+    # API 配置（enable_api 为 true 时有效）
+    api_config:
+      endpoint: null
+
+  tron_developers:
+    name: "TRON Developer Documentation"
+    description: "How to develop DApps based on java-tron"
+    base_url: "https://developers.tron.network/"
+    index_path: "./site/search/develop_search_index.json"
+    # 搜索策略
+    search_strategy:
+      enable_mkdocs: true      # 第1层：MkDocs 本地索引
+      enable_cache: true       # 第2层：本地缓存搜索
+      enable_api: true         # 第3层：在线 API 搜索
+    # 缓存抓取配置
+    cache_config:
+      pages:
+        - /docs/getting-start
+        - /docs/consensus
+        - /docs/resource-model
+        - /docs/tvm
+        - /docs/tron-ide
+        - /docs/build-a-web3-app
+        - /docs/networks
+        - /docs/introduction
+        - /docs/account
+        - /docs/transaction
+        - /docs/smart-contract
+        - /docs/trc10-token
+        - /docs/trc20-token
+        - /docs/super-representative
+        - /reference/json-rpc-api-overview
+      base_url: "https://developers.tron.network"
+    # API 配置
+    api_config:
+      endpoint: "https://developers.tron.network/tron/api-next/v2/search"
+
+# 通用配置
+general:
+  cache_ttl_seconds: 3600  # 本地缓存有效期（1小时）
+  default_limit: 5         # 默认返回结果数量
+  max_limit: 10            # 最大返回结果数量
