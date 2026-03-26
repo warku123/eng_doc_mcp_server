@@ -221,6 +221,9 @@ async def search_docs_three_tier(
             result = await search_via_local_cache(query, limit, source_name, config_path)
             if result and not result.startswith("Error") and result != "No relevant documentation found.":
                 return result
+            # 记录错误 sentinel
+            if result and (result.startswith("Error") or result == "No relevant documentation found."):
+                errors.append(f"Local cache: {result}")
         except Exception as e:
             errors.append(f"Local cache: {str(e)}")
     
@@ -230,6 +233,9 @@ async def search_docs_three_tier(
             result = await search_via_readme_api(query, limit, source_name, config_path)
             if result and not result.startswith("Error") and result != "No relevant documentation found." and not result.startswith("No results found"):
                 return result
+            # 记录错误 sentinel
+            if result and (result.startswith("Error") or result == "No relevant documentation found." or result.startswith("No results found")):
+                errors.append(f"ReadMe API: {result}")
         except Exception as e:
             errors.append(f"ReadMe API: {str(e)}")
     

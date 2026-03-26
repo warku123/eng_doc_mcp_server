@@ -139,8 +139,8 @@ async def test_tools_list_includes_doc_tools():
         tools = result.get("result", {}).get("tools", [])
         tool_names = [t.get("name") for t in tools]
         
-        assert "SearchDevelopJavaTron" in tool_names, f"SearchDevelopJavaTron 不在工具列表中"
-        assert "SearchJavaTron" in tool_names, f"SearchJavaTron 不在工具列表中"
+        assert "SearchDevelopJavaTron" in tool_names, "SearchDevelopJavaTron 不在工具列表中"
+        assert "SearchJavaTron" in tool_names, "SearchJavaTron 不在工具列表中"
         
         print("✅ 文档搜索工具已在工具列表中!")
         print(f"可用工具: {tool_names}")

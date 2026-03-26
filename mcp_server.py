@@ -174,34 +174,44 @@ async def handle_mcp_request(request: Request):
             
             if tool_name == "SearchJavaTron":
                 query = arguments.get("query", "")
-                # 验证 limit 参数
-                try:
-                    limit = int(arguments.get("limit", 5))
-                    if limit < 1 or limit > 10:
-                        result_text = "Error: limit must be between 1 and 10"
-                    else:
-                        result_text = await search_docs_three_tier(
-                            source_name="java_tron",
-                            query=query,
-                            limit=limit
-                        )
-                except (TypeError, ValueError):
-                    result_text = "Error: limit must be an integer"
+                # 验证 query 参数
+                if not isinstance(query, str):
+                    result_text = "Error: query must be a string"
+                else:
+                    query = query.strip()
+                    # 验证 limit 参数
+                    try:
+                        limit = int(arguments.get("limit", 5))
+                        if limit < 1 or limit > 10:
+                            result_text = "Error: limit must be between 1 and 10"
+                        else:
+                            result_text = await search_docs_three_tier(
+                                source_name="java_tron",
+                                query=query,
+                                limit=limit
+                            )
+                    except (TypeError, ValueError):
+                        result_text = "Error: limit must be an integer"
             elif tool_name == "SearchDevelopJavaTron":
                 query = arguments.get("query", "")
-                # 验证 limit 参数
-                try:
-                    limit = int(arguments.get("limit", 5))
-                    if limit < 1 or limit > 10:
-                        result_text = "Error: limit must be between 1 and 10"
-                    else:
-                        result_text = await search_docs_three_tier(
-                            source_name="tron_developers",
-                            query=query,
-                            limit=limit
-                        )
-                except (TypeError, ValueError):
-                    result_text = "Error: limit must be an integer"
+                # 验证 query 参数
+                if not isinstance(query, str):
+                    result_text = "Error: query must be a string"
+                else:
+                    query = query.strip()
+                    # 验证 limit 参数
+                    try:
+                        limit = int(arguments.get("limit", 5))
+                        if limit < 1 or limit > 10:
+                            result_text = "Error: limit must be between 1 and 10"
+                        else:
+                            result_text = await search_docs_three_tier(
+                                source_name="tron_developers",
+                                query=query,
+                                limit=limit
+                            )
+                    except (TypeError, ValueError):
+                        result_text = "Error: limit must be an integer"
             elif tool_name == "GetBlock":
                 result_text = await get_block(
                     arguments.get("block_number"),
