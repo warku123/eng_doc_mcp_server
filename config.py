@@ -4,8 +4,11 @@ import yaml
 from typing import Dict, Any, Optional
 
 
-# 默认配置文件路径
-DEFAULT_CONFIG_PATH = "./docs_config.yaml"
+# 默认配置文件路径 (基于本文件所在目录)
+DEFAULT_CONFIG_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "docs_config.yaml"
+)
 
 
 def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
@@ -14,7 +17,13 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
         raise FileNotFoundError(f"Config file not found: {config_path}")
     
     with open(config_path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+    
+    # 验证配置格式
+    if not isinstance(config, dict):
+        raise ValueError(f"Invalid config format: expected a mapping, got {type(config).__name__}")
+    
+    return config
 
 
 def get_doc_source_config(
@@ -42,7 +51,7 @@ def get_general_config(config_path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]
 
 
 def get_cache_ttl(config_path: str = DEFAULT_CONFIG_PATH) -> int:
-    """获取缓存有效期（秒）"""
+    """获取缓存有效期 (秒)"""
     general = get_general_config(config_path)
     return general.get('cache_ttl_seconds', 3600)
 

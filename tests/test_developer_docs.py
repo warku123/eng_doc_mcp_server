@@ -66,6 +66,9 @@ async def test_search_develop_java_tron_smart_contract():
         assert response.status_code == 200, f"请求失败: {response.status_code} - {response.text}"
         
         result = response.json()
+        assert "result" in result, "响应中缺少 result 字段"
+        assert "content" in result["result"], "响应中缺少 content 字段"
+        
         content = result["result"]["content"][0].get("text", "")
         assert content, "搜索结果为空"
         

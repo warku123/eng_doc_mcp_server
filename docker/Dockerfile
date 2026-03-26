@@ -18,9 +18,9 @@ COPY docs_config.yaml .
 
 # Create docs directory and download indexes during build
 RUN mkdir -p site/search && \
-    curl -L -o site/search/search_index.json \
+    curl -fL -o site/search/search_index.json \
     https://raw.githubusercontent.com/tronprotocol/documentation-en/gh-pages/search/search_index.json && \
-    curl -L -o site/search/develop_search_index.json \
+    curl -fL -o site/search/develop_search_index.json \
     https://raw.githubusercontent.com/abn2357/documentation-developers/main/site/search/develop_search_index.json && \
     echo "All indexes downloaded successfully"
 

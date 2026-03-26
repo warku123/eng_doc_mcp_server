@@ -82,12 +82,13 @@ async def fetch_all_docs(
         tasks = [fetch_single_page(client, path) for path in pages]
         results = await asyncio.gather(*tasks)
     
-    # 过滤错误并更新缓存
+    # 过滤错误并更新缓存（只有获取到有效结果时才缓存）
     valid_results = [r for r in results if not r.get("error")]
-    _docs_cache[source_name] = {
-        'data': valid_results,
-        'time': datetime.now()
-    }
+    if valid_results:
+        _docs_cache[source_name] = {
+            'data': valid_results,
+            'time': datetime.now()
+        }
     
     return valid_results
 

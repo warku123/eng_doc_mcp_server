@@ -201,14 +201,18 @@ async def search_docs_three_tier(
     # 第2层：本地缓存搜索
     if strategy.get('enable_cache', False):
         try:
-            return await search_via_local_cache(query, limit, source_name, config_path)
+            result = await search_via_local_cache(query, limit, source_name, config_path)
+            if result and not result.startswith("Error") and result != "No relevant documentation found.":
+                return result
         except Exception as e:
             errors.append(f"Local cache: {str(e)}")
     
     # 第3层：ReadMe API 实时搜索
     if strategy.get('enable_api', False):
         try:
-            return await search_via_readme_api(query, limit, config_path)
+            result = await search_via_readme_api(query, limit, config_path)
+            if result and not result.startswith("Error") and result != "No relevant documentation found.":
+                return result
         except Exception as e:
             errors.append(f"ReadMe API: {str(e)}")
     

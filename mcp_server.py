@@ -26,7 +26,8 @@ TOOLS_DEFINITION = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "A query to search the content with."}
+                "query": {"type": "string", "description": "A query to search the content with."},
+                "limit": {"type": "integer", "description": "Number of results to return (1-10)", "default": 5}
             },
             "required": ["query"]
         }
@@ -37,7 +38,8 @@ TOOLS_DEFINITION = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "A query to search the content with."}
+                "query": {"type": "string", "description": "A query to search the content with."},
+                "limit": {"type": "integer", "description": "Number of results to return (1-10)", "default": 5}
             },
             "required": ["query"]
         }
