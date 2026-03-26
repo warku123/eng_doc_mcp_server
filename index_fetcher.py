@@ -10,6 +10,9 @@ from config import get_doc_source_config, get_cache_ttl
 # 缓存存储
 _docs_cache: Dict[str, Dict[str, Any]] = {}
 
+# 按 source 的刷新锁，防止缓存击穿
+_refresh_locks: Dict[str, asyncio.Lock] = {}
+
 
 async def fetch_all_docs(
     source_name: str,
@@ -27,25 +30,38 @@ async def fetch_all_docs(
     Returns:
         文档列表
     """
-    global _docs_cache
+    global _docs_cache, _refresh_locks
     
-    # 检查缓存
+    # 快速路径：检查缓存（无锁）
     if not force_refresh and source_name in _docs_cache:
         cache_entry = _docs_cache[source_name]
         ttl = get_cache_ttl(config_path)
         if datetime.now() - cache_entry['time'] < timedelta(seconds=ttl):
             return cache_entry['data']
     
-    # 获取配置
-    config = get_doc_source_config(source_name, config_path)
-    cache_config = config.get('cache_config', {})
-    pages = cache_config.get('pages', [])
-    base_url = cache_config.get('base_url', '')
+    # 获取或创建该 source 的锁
+    if source_name not in _refresh_locks:
+        _refresh_locks[source_name] = asyncio.Lock()
+    lock = _refresh_locks[source_name]
     
-    if not pages or not base_url:
-        return []
-    
-    # 并发抓取页面
+    # 加锁后再次检查（可能其他请求已更新缓存）
+    async with lock:
+        if not force_refresh and source_name in _docs_cache:
+            cache_entry = _docs_cache[source_name]
+            ttl = get_cache_ttl(config_path)
+            if datetime.now() - cache_entry['time'] < timedelta(seconds=ttl):
+                return cache_entry['data']
+        
+        # 获取配置
+        config = get_doc_source_config(source_name, config_path)
+        cache_config = config.get('cache_config', {})
+        pages = cache_config.get('pages', [])
+        base_url = cache_config.get('base_url', '')
+        
+        if not pages or not base_url:
+            return []
+        
+        # 并发抓取页面
     semaphore = asyncio.Semaphore(3)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"

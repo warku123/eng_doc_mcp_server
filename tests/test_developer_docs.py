@@ -8,6 +8,7 @@ import pytest
 TARGET_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001/mcp")
 
 
+@pytest.mark.skipif(os.getenv("INTEGRATION_TEST") != "1", reason="需要启动 MCP 服务器 (INTEGRATION_TEST=1)")
 @pytest.mark.asyncio
 async def test_search_develop_java_tron_basic():
     """测试 SearchDevelopJavaTron 基本搜索"""
@@ -35,6 +36,7 @@ async def test_search_develop_java_tron_basic():
         
         content = result["result"]["content"][0].get("text", "")
         assert content, "搜索结果为空"
+        assert not content.startswith("Error"), f"搜索返回错误: {content}"
         
         print("✅ SearchDevelopJavaTron 成功!")
         print("返回结果:")
@@ -44,6 +46,7 @@ async def test_search_develop_java_tron_basic():
         print()
 
 
+@pytest.mark.skipif(os.getenv("INTEGRATION_TEST") != "1", reason="需要启动 MCP 服务器 (INTEGRATION_TEST=1)")
 @pytest.mark.asyncio
 async def test_search_develop_java_tron_smart_contract():
     """测试 SearchDevelopJavaTron 智能合约搜索"""
@@ -71,12 +74,14 @@ async def test_search_develop_java_tron_smart_contract():
         
         content = result["result"]["content"][0].get("text", "")
         assert content, "搜索结果为空"
+        assert not content.startswith("Error"), f"搜索返回错误: {content}"
         
         print("✅ 智能合约搜索成功!")
         print(content[:800] + "..." if len(content) > 800 else content)
         print()
 
 
+@pytest.mark.skipif(os.getenv("INTEGRATION_TEST") != "1", reason="需要启动 MCP 服务器 (INTEGRATION_TEST=1)")
 @pytest.mark.asyncio
 async def test_search_java_tron_basic():
     """测试 SearchJavaTron 基本搜索"""
@@ -104,6 +109,7 @@ async def test_search_java_tron_basic():
         
         content = result["result"]["content"][0].get("text", "")
         assert content, "搜索结果为空"
+        assert not content.startswith("Error"), f"搜索返回错误: {content}"
         
         print("✅ SearchJavaTron 成功!")
         print("返回结果:")
@@ -113,6 +119,7 @@ async def test_search_java_tron_basic():
         print()
 
 
+@pytest.mark.skipif(os.getenv("INTEGRATION_TEST") != "1", reason="需要启动 MCP 服务器 (INTEGRATION_TEST=1)")
 @pytest.mark.asyncio
 async def test_tools_list_includes_doc_tools():
     """验证 tools/list 包含文档搜索工具"""
