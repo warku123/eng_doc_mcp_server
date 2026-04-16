@@ -64,10 +64,7 @@ TOOLS_DEFINITION = [
                     "default": False
                 }
             },
-            "anyOf": [
-                {"required": ["block_number"]},
-                {"required": ["block_hash"]}
-            ]
+            "required": []
         }
     },
     {
